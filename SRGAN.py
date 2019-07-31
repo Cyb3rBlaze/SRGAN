@@ -121,7 +121,7 @@ def create_discriminator():
     return tf.keras.Model(inputs=input, outputs=dense2)
 
 discriminator = create_discriminator()
-discriminator.summary()
+#discriminator.summary()
 
 generator = create_generator()
 #generator.summary()
@@ -172,6 +172,16 @@ def saveEpochImage(model, test_input, epoch):
     plt.savefig("./output/" + str(epoch) + ".jpg")
 
 #===========================
+#CHECKPOINTS TO SAVE MODEL
+#===========================
+checkpoint_dir = './training_checkpoints'
+checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
+    discriminator_optimizer=discriminator_optimizer,
+    generator=generator,
+    discriminator=discriminator)
+
+#===========================
 #TRAIN MODEL
 #===========================
 EPOCHS = 150
@@ -201,6 +211,7 @@ def train(low_resData, high_resData, epochs, seed):
         print("Epoch " + str(epoch) + " finished")
         if epoch % 5 == 0:
             saveEpochImage(generator, seed, (epoch+1))
+            checkpoint.save(file_prefix = checkpoint_prefix)
 
 #===========================
 #FUNCTION CALLS
