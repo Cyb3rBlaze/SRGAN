@@ -43,8 +43,24 @@ def load_and_preprocess_data(directory):
 #CREATE MODELS
 #===========================
 
-def res_block():
-    pass
+def res_block(model, filters, strides):
+    gen = model
+
+    model = tf.keras.layers.Conv2D(filters, 3, strides=strides, padding="same", use_bias=False)(model)
+    model = tf.keras.layers.BatchNormalization()(model)
+    model = tf.keras.layers.PReLU(alpha_initializer='zeros', alpha_regularizer=None, alpha_constraint=None, shared_axes=[1,2])(model)
+    model = tf.keras.layers.Conv2D(filters, 3, strides=strides, padding="same", use_bias=False)(model)
+    model = tf.keras.layers.BatchNormalization()(model)
+
+    model = tf.keras.layers.add([gen, model])
+
+    return model
+
+def up_sampling_block(model, filters, strides):
+    model = tf.keras.layers.Conv2DTranspose(filters, 3, strides=strides, padding="same")(model)
+    model = tf.keras.layers.LeakyReLU()(model)
+
+    return model
 
 def disc_block(filters, strides):
     #initializer = tf.random_normal_initializer(0., 0.02)
@@ -57,7 +73,31 @@ def disc_block(filters, strides):
     return result
 
 def create_generator():
-    pass
+    input = tf.keras.layers.Input(shape=[512, 512, 3])
+
+    conv1 = tf.keras.layers.Conv2D(64, 9, strides=1, padding="same")(input)
+    #prelu1 = tf.keras.layers.PReLU(alpha_initializer='zeros', alpha_regularizer=None, alpha_constraint=None, shared_axes=[1,2])(conv1)
+    prelu1 = tf.keras.layers.PReLU()(conv1)
+
+    gen_model = prelu1
+
+    block1 = res_block(prelu1, 64, 1)
+    block2 = res_block(block1, 64, 1)
+    block3 = res_block(block2, 64, 1)
+    block4 = res_block(block3, 64, 1)
+    block5 = res_block(block4, 64, 1)
+
+    conv2 = tf.keras.layers.Conv2D(filters=64, kernel_size=3, strides=1, padding="same")(block5)
+    batch1 = tf.keras.layers.BatchNormalization(momentum = 0.5)(conv2)
+    skip1 = tf.keras.layers.add([gen_model, batch1])
+
+    block6 = up_sampling_block(skip1, 256, 1)
+    block7 = up_sampling_block(block6, 256, 1)
+
+    last = tf.keras.layers.Conv2D(3, 9, strides=1, padding="same", activation="tanh")(block7)
+
+    return tf.keras.Model(inputs=input, outputs=last)
+
 
 def create_discriminator():
     input = tf.keras.layers.Input(shape=[512, 512, 3])
@@ -81,11 +121,16 @@ def create_discriminator():
     return tf.keras.Model(inputs=input, outputs=dense2)
 
 discriminator = create_discriminator()
-#discriminator.summary()
+discriminator.summary()
+
+generator = create_generator()
+#generator.summary()
 
 #===========================
 #LOSS FUNCTIONS
 #===========================
+LAMBDA = 100
+
 cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
 def discriminator_loss(real_output, fake_output):
@@ -94,8 +139,11 @@ def discriminator_loss(real_output, fake_output):
     total_loss = real_loss + fake_loss
     return total_loss
 
-def generator_loss(fake_output):
-    return cross_entropy(tf.ones_like(fake_output), fake_output)
+def generator_loss(fake_output, generated_image, target):
+    gan_loss = cross_entropy(tf.ones_like(fake_output), fake_output)
+    l1_loss = tf.reduce_mean(tf.abs(target - generated_image))
+    total_gen_loss = gan_loss + (LAMBDA * l1_loss)
+    return total_gen_loss
 
 #===========================
 #CREATING MODEL OPTIMIZER OBJECTS
@@ -135,7 +183,7 @@ def one_train_step(input, target):
         disc_real_output = discriminator(target, training=True)
         disc_generated_output = discriminator(gen_output, training=True)
 
-        gen_loss = generator_loss(disc_generated_output)
+        gen_loss = generator_loss(disc_generated_output, gen_output, target)
         disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
 
     gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
@@ -147,10 +195,10 @@ def one_train_step(input, target):
 def train(low_resData, high_resData, epochs, seed):
     saveEpochImage(generator, seed, 0)
 
-    for epoch in tqdm(range(EPOCHS)):
+    for epoch in range(EPOCHS):
         for low, high in tqdm(zip(low_resData, high_resData)):
-            train_step(low, high)
-
+            one_train_step(low, high)
+        print("Epoch " + str(epoch) + " finished")
         if epoch % 5 == 0:
             saveEpochImage(generator, seed, (epoch+1))
 
