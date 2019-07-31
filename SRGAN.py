@@ -12,13 +12,13 @@ from PIL import Image
 def save_training_data(directory):
     list = listdir(directory)
     images = []
-    size = (512, 512)
+    size = (64, 64)
 
     for image_name in tqdm(list):
         image = Image.open(directory + "/" + image_name).convert("RGB").resize(size)
         image.save("training_data/high_res/" + image_name)
-        image = image.resize((128, 128))
-        image = image.resize((512, 512))
+        image = image.resize((32, 32))
+        image = image.resize((64, 64))
         image.save("training_data/low_res/" + image_name)
 
 def normalize(image):
@@ -34,8 +34,8 @@ def load_and_preprocess_data(directory):
     high_resImages = []
 
     for image in tqdm(low_resList):
-        low_resImages += [normalize(np.array(Image.open(directory + "/low_res/" + image)).reshape((1, 512, 512, 3)))]
-        high_resImages += [normalize(np.array(Image.open(directory + "/high_res/" + image)).reshape((1, 512, 512, 3)))]
+        low_resImages += [normalize(np.array(Image.open(directory + "/low_res/" + image)).reshape((1, 64, 64, 3)))]
+        high_resImages += [normalize(np.array(Image.open(directory + "/high_res/" + image)).reshape((1, 64, 64, 3)))]
 
     return low_resImages, high_resImages
 
@@ -73,7 +73,7 @@ def disc_block(filters, strides):
     return result
 
 def create_generator():
-    input = tf.keras.layers.Input(shape=[512, 512, 3])
+    input = tf.keras.layers.Input(shape=[64, 64, 3])
 
     conv1 = tf.keras.layers.Conv2D(64, 9, strides=1, padding="same")(input)
     #prelu1 = tf.keras.layers.PReLU(alpha_initializer='zeros', alpha_regularizer=None, alpha_constraint=None, shared_axes=[1,2])(conv1)
@@ -100,7 +100,7 @@ def create_generator():
 
 
 def create_discriminator():
-    input = tf.keras.layers.Input(shape=[512, 512, 3])
+    input = tf.keras.layers.Input(shape=[64, 64, 3])
 
     conv1 = tf.keras.layers.Conv2D(64, 3, strides=1, padding='same')(input)
     lrelu1 = tf.keras.layers.LeakyReLU()(conv1)
@@ -139,9 +139,26 @@ def discriminator_loss(real_output, fake_output):
     total_loss = real_loss + fake_loss
     return total_loss
 
+def vgg_layers(layer_names):
+    vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
+    vgg.trainable = False
+
+    outputs = [vgg.get_layer(name).output for name in layer_names]
+
+    model = tf.keras.Model([vgg.input], outputs)
+    return model
+
+content_layers = ["block5_conv2"]
+
+vgg_model = vgg_layers(content_layers)
+
 def generator_loss(fake_output, generated_image, target):
     gan_loss = cross_entropy(tf.ones_like(fake_output), fake_output)
-    l1_loss = tf.reduce_mean(tf.abs(target - generated_image))
+    target_features = tf.keras.applications.vgg19.preprocess_input((target+1)*127.5)
+    target_map = vgg_model(target_features)
+    generated_features = tf.keras.applications.vgg19.preprocess_input((generated_image+1)*127.5)
+    generated_map = vgg_model(generated_features)
+    l1_loss = tf.reduce_mean(tf.losses.mean_squared_error(target_map, generated_map))
     total_gen_loss = gan_loss + (LAMBDA * l1_loss)
     return total_gen_loss
 
