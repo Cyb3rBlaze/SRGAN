@@ -43,7 +43,6 @@ def load_and_preprocess_data(directory):
 #===========================
 #CREATE MODELS
 #===========================
-
 def res_block(model, filters, strides):
     gen = model
 
@@ -203,7 +202,7 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
 #===========================
 #TRAIN MODEL
 #===========================
-EPOCHS = 150
+EPOCHS = 430
 
 def one_train_step(input, target):
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
