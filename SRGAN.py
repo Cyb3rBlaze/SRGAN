@@ -235,15 +235,15 @@ def train(low_resData, high_resData, epochs, seed):
 #===========================
 #FUNCTION CALLS
 #===========================
-save_training_data("./raw_data")
+#save_training_data("./raw_data")
 print("Beginning train data preprocessing...")
-#low_res, high_res = load_and_preprocess_data("./training_data")
+low_res, high_res = load_and_preprocess_data("./training_data")
 
 print("Beginning training...")
 
     #===========================
     #CREATING SEED TO SEE PROGRESS
     #===========================
-#seed = low_res[0]
+seed = low_res[0]
 
-#train(low_res, high_res, EPOCHS, seed)
+train(low_res, high_res, EPOCHS, seed)
