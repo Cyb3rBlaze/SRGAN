@@ -12,13 +12,13 @@ from PIL import Image
 def save_training_data(directory):
     list = listdir(directory)
     images = []
-    size = (512, 512)
+    size = (64, 64)
 
     for image_name in tqdm(list):
         image = Image.open(directory + "/" + image_name).convert("RGB").resize(size)
         image.save("training_data/high_res/" + image_name)
-        image = image.resize((128, 128))
-        image = image.resize((512, 512))
+        image = image.resize((32, 32))
+        image = image.resize((64, 64))
         image.save("training_data/low_res/" + image_name)
 
 def normalize(image):
@@ -35,8 +35,8 @@ def load_and_preprocess_data(directory):
     high_resImages = []
 
     for image in tqdm(low_resList):
-        low_resImages += [normalize(np.array(Image.open(directory + "/low_res/" + image)).reshape((1, 512, 512, 3)))]
-        high_resImages += [normalize(np.array(Image.open(directory + "/high_res/" + image)).reshape((1, 512, 512, 3)))]
+        low_resImages += [normalize(np.array(Image.open(directory + "/low_res/" + image)).reshape((1, 64, 64, 3)))]
+        high_resImages += [normalize(np.array(Image.open(directory + "/high_res/" + image)).reshape((1, 64, 64, 3)))]
 
     return low_resImages, high_resImages
 
@@ -74,7 +74,7 @@ def disc_block(filters, strides):
     return result
 
 def create_generator():
-    input = tf.keras.layers.Input(shape=[512, 512, 3])
+    input = tf.keras.layers.Input(shape=[64, 64, 3])
 
     conv1 = tf.keras.layers.Conv2D(64, 9, strides=1, padding="same")(input)
     #prelu1 = tf.keras.layers.PReLU(alpha_initializer='zeros', alpha_regularizer=None, alpha_constraint=None, shared_axes=[1,2])(conv1)
@@ -101,7 +101,7 @@ def create_generator():
 
 
 def create_discriminator():
-    input = tf.keras.layers.Input(shape=[512, 512, 3])
+    input = tf.keras.layers.Input(shape=[64, 64, 3])
 
     conv1 = tf.keras.layers.Conv2D(64, 3, strides=1, padding='same')(input)
     lrelu1 = tf.keras.layers.LeakyReLU()(conv1)
