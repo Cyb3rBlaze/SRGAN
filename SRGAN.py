@@ -5,11 +5,15 @@ import os
 from os import listdir
 from tqdm import tqdm
 from PIL import Image
+import cv2
+import csv
+import requests
+from io import BytesIO
 
 #===========================
 #LOAD AND PREPROCESS IMAGES
 #===========================
-def save_training_data(directory):
+'''def save_training_data(directory):
     list = listdir(directory)
     images = []
     size = (256, 256)
@@ -19,7 +23,7 @@ def save_training_data(directory):
         image.save("training_data/high_res/" + image_name)
         image = image.resize((64, 64))
         image = image.resize((256, 256))
-        image.save("training_data/low_res/" + image_name)
+        image.save("training_data/low_res/" + image_name)'''
 
 def normalize(image):
     image = tf.cast(image, tf.float32)
@@ -34,9 +38,26 @@ def load_and_preprocess_data(directory):
     low_resImages = []
     high_resImages = []
 
-    for image in tqdm(low_resList):
+    size = (256, 256)
+
+    with open('raw_data/data.tsv') as tsvfile:
+        reader = csv.reader(tsvfile, delimiter='\t')
+        for row in tqdm(reader):
+            if row[0][0] == 'h':
+                try:
+                    response = requests.get(row[0])
+                    img = Image.open(BytesIO(response.content)).resize(size)
+                    high_resImages += [normalize(np.array(img).reshape((1, 256, 256, 3)))]
+                    img = img.resize((64, 64))
+                    img = img.resize((256, 256))
+                    low_resImages += [normalize(np.array(img).reshape((1, 256, 256, 3)))]
+                except:
+                    pass
+
+    '''for image in tqdm(low_resList):
+        print(np.array(Image.open(directory + "/low_res/" + image)).reshape((1, 256, 256, 3)))
         low_resImages += [normalize(np.array(Image.open(directory + "/low_res/" + image)).reshape((1, 256, 256, 3)))]
-        high_resImages += [normalize(np.array(Image.open(directory + "/high_res/" + image)).reshape((1, 256, 256, 3)))]
+        high_resImages += [normalize(np.array(Image.open(directory + "/high_res/" + image)).reshape((1, 256, 256, 3)))]'''
 
     return low_resImages, high_resImages
 
@@ -175,9 +196,12 @@ discriminator_optimizer = create_adam_optimizer()
 #===========================
 #FUNCTION USED TO SAVE DATA
 #===========================
-def saveEpochImage(model, test_input, epoch):
+def saveImage(model, test_input, epoch, trained=False):
     prediction = model(test_input, training=True)
     plt.figure(figsize=(15,15))
+
+    cv2_image = cv2.cvtColor(tf.cast(((prediction * 0.5 + 0.5) * 255), tf.uint8).numpy().reshape((256, 256, 3)), cv2.COLOR_BGR2RGB)
+    cv2.imwrite("test.jpg", cv2_image)
 
     display_list = [test_input[0], prediction[0]]
     title = ['Input Image', 'Predicted Image']
@@ -187,7 +211,28 @@ def saveEpochImage(model, test_input, epoch):
         plt.title(title[i])
         plt.imshow(display_list[i] * 0.5 + 0.5)
         plt.axis('off')
-    plt.savefig("./output/" + str(epoch) + ".jpg")
+    if trained == False:
+        plt.savefig("./output/" + str(epoch) + ".jpg")
+    else:
+        plt.savefig("./output.jpg")
+
+def createVideoFeed(model):
+    cap = cv2.VideoCapture(0)
+    while True:
+        ret, frame = cap.read()
+        frame = cv2.resize(frame, (64, 64))
+        frame = cv2.resize(frame, (256, 256))
+        high_res = np.array(frame).reshape((1, 256, 256, 3))
+        high_res = normalize(high_res)
+        high_res = model(high_res, training=True)
+        cv2_image = tf.cast(((high_res * 0.5 + 0.5) * 255), tf.uint8).numpy().reshape((256, 256, 3))
+        #cv2.imshow('output', frame)
+        cv2.imshow('output', cv2_image)
+        key = cv2.waitKey(1)
+        if key == ord('q'):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
 
 #===========================
 #CHECKPOINTS TO SAVE MODEL
@@ -221,14 +266,14 @@ def one_train_step(input, target):
     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
 
 def train(low_resData, high_resData, epochs, seed):
-    saveEpochImage(generator, seed, 0)
+    saveImage(generator, seed, 0)
 
     for epoch in range(EPOCHS):
         for low, high in tqdm(zip(low_resData, high_resData)):
             one_train_step(low, high)
         print("Epoch " + str(epoch) + " finished")
         if epoch % 5 == 0:
-            saveEpochImage(generator, seed, (epoch+1))
+            saveImage(generator, seed, (epoch+1))
             checkpoint.save(file_prefix = checkpoint_prefix)
 
 #===========================
@@ -246,3 +291,8 @@ print("Beginning training...")
 seed = low_res[0]
 
 train(low_res, high_res, EPOCHS, seed)
+
+#checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
+
+#createVideoFeed(generator)
+#saveImage(generator, low_res[0], 0, trained=True)
